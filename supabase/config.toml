@@ -1,1 +1,4 @@
 project_id = "tlyrkmgxisdlwsrsosxz"
+
+[functions.ai-parser]
+verify_jwt = false

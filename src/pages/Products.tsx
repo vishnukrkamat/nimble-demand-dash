@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,48 +14,60 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { AddProductDialog } from "@/components/AddProductDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
-const products = [
-  {
-    id: 1,
-    name: "Wireless Bluetooth Headphones",
-    category: "Electronics",
-    currentStock: 45,
-    reorderThreshold: 20,
-    leadTimeDays: 7,
-    status: "in_stock"
-  },
-  {
-    id: 2,
-    name: "Ergonomic Wireless Mouse",
-    category: "Electronics", 
-    currentStock: 5,
-    reorderThreshold: 20,
-    leadTimeDays: 5,
-    status: "low_stock"
-  },
-  {
-    id: 3,
-    name: "USB-C Charging Cable",
-    category: "Accessories",
-    currentStock: 8,
-    reorderThreshold: 15,
-    leadTimeDays: 3,
-    status: "critical"
-  },
-  {
-    id: 4,
-    name: "Laptop Stand Adjustable",
-    category: "Accessories",
-    currentStock: 32,
-    reorderThreshold: 25,
-    leadTimeDays: 10,
-    status: "in_stock"
-  }
-];
+interface Product {
+  id: string;
+  name: string;
+  category: string;
+  current_stock: number;
+  reorder_threshold: number;
+  lead_time_days: number;
+  created_at: string;
+  updated_at: string;
+}
 
 export default function Products() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load products. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatus = (product: Product) => {
+    const stock = product.current_stock || 0;
+    const threshold = product.reorder_threshold || 0;
+    
+    if (stock === 0) return "critical";
+    if (stock <= threshold) return "low_stock";
+    return "in_stock";
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -88,6 +100,25 @@ export default function Products() {
     product.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (loading) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <div className="flex-1 flex flex-col">
+          <Header />
+          <main className="flex-1 p-6">
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+                <p className="mt-4 text-muted-foreground">Loading products...</p>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
@@ -105,10 +136,7 @@ export default function Products() {
                   Manage your inventory and track stock levels
                 </p>
               </div>
-              <Button variant="gradient">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Product
-              </Button>
+              <AddProductDialog onProductAdded={fetchProducts} />
             </div>
 
             {/* Search and Filters */}
@@ -146,8 +174,8 @@ export default function Products() {
                         <Package className="h-5 w-5 text-primary" />
                         <CardTitle className="text-lg">{product.name}</CardTitle>
                       </div>
-                      <Badge variant={getStatusColor(product.status) as any}>
-                        {getStatusText(product.status)}
+                      <Badge variant={getStatusColor(getStatus(product)) as any}>
+                        {getStatusText(getStatus(product))}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">{product.category}</p>
@@ -156,20 +184,20 @@ export default function Products() {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <p className="text-muted-foreground">Current Stock</p>
-                        <p className="font-semibold text-lg">{product.currentStock}</p>
+                        <p className="font-semibold text-lg">{product.current_stock}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Reorder At</p>
-                        <p className="font-semibold text-lg">{product.reorderThreshold}</p>
+                        <p className="font-semibold text-lg">{product.reorder_threshold}</p>
                       </div>
                     </div>
                     
                     <div className="text-sm">
                       <p className="text-muted-foreground">Lead Time</p>
-                      <p className="font-medium">{product.leadTimeDays} days</p>
+                      <p className="font-medium">{product.lead_time_days} days</p>
                     </div>
 
-                    {product.currentStock <= product.reorderThreshold && (
+                    {product.current_stock <= product.reorder_threshold && (
                       <div className="flex items-center space-x-2 p-2 rounded-lg bg-warning/10 border border-warning/20">
                         <AlertTriangle className="h-4 w-4 text-warning" />
                         <p className="text-sm text-warning font-medium">
